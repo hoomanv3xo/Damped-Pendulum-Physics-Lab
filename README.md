@@ -9,7 +9,8 @@ Initial Angle:
 Damping γ:
 
 Integrator: RK4, fixed step h = 4 ms, driven by real elapsed time, so speed is independent of monitor refresh rate. Mass = 1 kg.
-
+![Screenshot of the app](pendulum.png)
+![Screenshot of the app](pendulum2.png)
 #### Angle
 
 0°
