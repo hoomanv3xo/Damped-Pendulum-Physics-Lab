@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Damped Pendulum Physics Lab</title>
+<style>
+:root{--bg:#0f172a;--panel:#1e293b;--card:#334155;--canvas:#0b1220;--text:#fff;--muted:#94a3b8;--accent:#38bdf8;--good:#22c55e;--warn:#f59e0b;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#f1f5f9;--panel:#fff;--card:#e2e8f0;--canvas:#0b1220;--text:#0f172a;--muted:#475569;--accent:#0284c7;color-scheme:light}}
+:root[data-theme="dark"]{--bg:#0f172a;--panel:#1e293b;--card:#334155;--text:#fff;--muted:#94a3b8;--accent:#38bdf8}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif;min-height:100vh;padding:20px}
+.container{max-width:1200px;margin:auto;display:grid;grid-template-columns:320px 1fr;gap:20px}
+.controls,.simulation{background:var(--panel);padding:20px;border-radius:15px}
+.control{margin-bottom:18px}
+label{display:block;margin-bottom:8px}
+input[type=range]{width:100%}
+.value{color:var(--accent);font-weight:bold}
+.buttons{display:flex;gap:10px;margin-top:16px}
+button{flex:1;padding:12px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-weight:bold}
+button:hover{opacity:.9}
+canvas{width:100%;background:var(--canvas);border-radius:10px;border:2px solid var(--accent);margin-bottom:15px;display:block}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:15px}
+.card{background:var(--card);padding:12px;border-radius:10px;text-align:center}
+.energy{margin-top:8px;height:10px;background:#111827;border-radius:10px;overflow:hidden}
+.fill{height:100%;width:0}
+.ke{background:var(--good)}.pe{background:var(--warn)}
+.panel{background:var(--card);padding:15px;border-radius:10px;margin-bottom:12px}
+.panel h3{margin-bottom:10px}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:7px 8px;text-align:right;border-bottom:1px solid rgba(148,163,184,.25);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:normal}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;font-size:14px}
+.kv span{color:var(--muted);display:block;font-size:12px}
+.note{color:var(--muted);font-size:12px;margin-top:8px;line-height:1.4}
+@media(max-width:900px){.container{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="controls">
+<h2>Damped Pendulum Physics Lab</h2><br>
+<div class="control"><label>Length (m): <span class="value" id="lengthValue"></span></label>
+<input type="range" id="length" min="0.5" max="5" step="0.1" value="2"></div>
+<div class="control"><label>Gravity: <span class="value" id="gravityValue"></span></label>
+<input type="range" id="gravity" min="1" max="20" step="0.1" value="9.81"></div>
+<div class="control"><label>Initial Angle: <span class="value" id="angleValue"></span></label>
+<input type="range" id="angle" min="5" max="85" value="40"></div>
+<div class="control"><label>Damping γ: <span class="value" id="dampingValue"></span></label>
+<input type="range" id="damping" min="0" max="0.5" step="0.01" value="0.08"></div>
+<div class="buttons"><button id="toggleBtn">Pause</button><button id="resetBtn">Reset</button></div>
+<p class="note">Integrator: RK4, fixed step h = 4 ms, driven by real elapsed time, so speed is independent of monitor refresh rate. Mass = 1 kg.</p>
+</div>
+
+<div class="simulation">
+<canvas id="canvas" width="800" height="500"></canvas>
+<canvas id="graphCanvas" width="800" height="250"></canvas>
+
+<div class="stats">
+<div class="card"><h4>Angle</h4><p id="currentAngle">0°</p></div>
+<div class="card"><h4>Angular Velocity</h4><p id="velocity">0</p></div>
+<div class="card"><h4>Kinetic Energy (J)</h4><p id="keText">0</p><div class="energy"><div id="keBar" class="fill ke"></div></div></div>
+<div class="card"><h4>Potential Energy (J)</h4><p id="peText">0</p><div class="energy"><div id="peBar" class="fill pe"></div></div></div>
+</div>
+
+<div class="panel">
+<h3>Measurements: theory vs. simulation</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Quantity</th><th>Theory</th><th>Measured</th><th>Error</th></tr></thead>
+<tbody>
+<tr><td>Period (s)</td><td id="tPeriod">–</td><td id="mPeriod">–</td><td id="ePeriod">–</td></tr>
+<tr><td>Amplitude decay rate γ/2 (1/s)</td><td id="tDecay">–</td><td id="mDecay">–</td><td id="eDecay">–</td></tr>
+<tr><td>Energy lost (J)</td><td id="tLoss">–</td><td id="mLoss">–</td><td id="eLoss">–</td></tr>
+</tbody></table></div>
+<p class="note" id="periodNote"></p>
+</div>
+
+<div class="panel">
+<h3>Derived quantities</h3>
+<div class="kv">
+<div><span>Sim time</span><b id="simTimeT">0</b></div>
+<div><span>ω₀ = √(g/L)</span><b id="w0T">–</b></div>
+<div><span>Small-angle T₀</span><b id="t0T">–</b></div>
+<div><span>Exact undamped T (AGM)</span><b id="texT">–</b></div>
+<div><span>Damping ratio ζ</span><b id="zetaT">–</b></div>
+<div><span>Regime</span><b id="regimeT">–</b></div>
+<div><span>Quality factor Q</span><b id="qT">–</b></div>
+<div><span>Time constant τ = 2/γ</span><b id="tauT">–</b></div>
+<div><span>Energy half-life</span><b id="halfT">–</b></div>
+<div><span>Log decrement δ</span><b id="deltaT">–</b></div>
+<div><span>Energy remaining</span><b id="remT">–</b></div>
+<div><span>Max energy drift (γ = 0)</span><b id="driftT">–</b></div>
+</div>
+</div>
+</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const ctx = $("canvas").getContext("2d");
+const gcv = $("graphCanvas"), gctx = gcv.getContext("2d");
+const sl = {L:$("length"), g:$("gravity"), a:$("angle"), d:$("damping")};
+
+const H = 0.004, MASS = 1, MAX_POINTS = 300;
+let theta, omega, running, trail, hist;
+let simTime, E0, dissipated, maxDrift;
+let lastCross, measuredT, peaks;
+let acc = 0, lastNow = null;
+
+const deg2rad = d => d * Math.PI / 180;
+const P = () => ({L:+sl.L.value, g:+sl.g.value, gam:+sl.d.value});
+
+function exactPeriod(L, g, th0){
+  const T0 = 2*Math.PI*Math.sqrt(L/g);
+  let a = 1, b = Math.cos(th0/2);
+  for(let i=0;i<10;i++) [a,b] = [(a+b)/2, Math.sqrt(a*b)];
+  return T0 / a;
+}
+const energy = (th, om, L, g) => ({
+  KE: 0.5*MASS*L*L*om*om,
+  PE: MASS*g*L*(1 - Math.cos(th))
+});
+
+function updateLabels(){
+  const {L,g,gam} = P();
+  $("lengthValue").textContent = L.toFixed(1);
+  $("gravityValue").textContent = g.toFixed(2);
+  $("angleValue").textContent = sl.a.value + "°";
+  $("dampingValue").textContent = gam.toFixed(2);
+}
+
+function resetPendulum(){
+  const {L,g} = P();
+  theta = deg2rad(+sl.a.value); omega = 0;
+  running = true; trail = [];
+  hist = {ke:[], pe:[], l:[], tot:[]};
+  simTime = 0; dissipated = 0; maxDrift = 0;
+  lastCross = null; measuredT = null; peaks = [];
+  E0 = energy(theta, 0, L, g).PE;
+  acc = 0;
+  $("toggleBtn").textContent = "Pause";
+}
+
+Object.values(sl).forEach(s => s.addEventListener("input", () => { updateLabels(); resetPendulum(); }));
+$("toggleBtn").addEventListener("click", () => {
+  running = !running;
+  $("toggleBtn").textContent = running ? "Pause" : "Resume";
+});
+$("resetBtn").addEventListener("click", resetPendulum);
+
+// ---- RK4 with fixed step ----
+function deriv(th, om, L, g, gam){ return [om, -(g/L)*Math.sin(th) - gam*om]; }
+
+function step(){
+  const {L,g,gam} = P();
+  const th0 = theta, om0 = omega;
+  const k1 = deriv(th0, om0, L, g, gam);
+  const k2 = deriv(th0 + H/2*k1[0], om0 + H/2*k1[1], L, g, gam);
+  const k3 = deriv(th0 + H/2*k2[0], om0 + H/2*k2[1], L, g, gam);
+  const k4 = deriv(th0 + H*k3[0],   om0 + H*k3[1],   L, g, gam);
+  theta = th0 + H/6*(k1[0] + 2*k2[0] + 2*k3[0] + k4[0]);
+  omega = om0 + H/6*(k1[1] + 2*k2[1] + 2*k3[1] + k4[1]);
+  simTime += H;
+
+  // dissipated energy: integral of m L^2 gamma omega^2 dt (trapezoid)
+  dissipated += MASS*L*L*gam*0.5*(om0*om0 + omega*omega)*H;
+
+  // upward zero crossings -> period (linear interpolation)
+  if(th0 < 0 && theta >= 0){
+    const tc = simTime - H + H*(-th0)/(theta - th0);
+    if(lastCross !== null) measuredT = tc - lastCross;
+    lastCross = tc;
+  }
+  // turning points (omega changes sign) -> amplitude peaks
+  if(om0*omega < 0){
+    const f = om0/(om0 - omega);
+    const tp = simTime - H + H*f;
+    const A = Math.abs(th0 + f*(theta - th0));
+    if(A > 1e-4){
+      peaks.push({t:tp, lnA:Math.log(A)});
+      if(peaks.length > 60) peaks.shift();
+    }
+  }
+  const e = energy(theta, omega, L, g);
+  const tot = e.KE + e.PE;
+  if(gam === 0) maxDrift = Math.max(maxDrift, Math.abs(tot - E0)/E0);
+  if(tot < 1e-6*E0) running = false;
+}
+
+function fitDecay(){
+  const n = peaks.length;
+  if(n < 3) return null;
+  let st=0, sy=0, stt=0, sty=0;
+  peaks.forEach(p => { st+=p.t; sy+=p.lnA; stt+=p.t*p.t; sty+=p.t*p.lnA; });
+  const den = n*stt - st*st;
+  if(den === 0) return null;
+  return -(n*sty - st*sy)/den;   // = gamma/2 for small angles
+}
+
+const fmt = (v, d=3) => (v === null || !isFinite(v)) ? "–" : v.toFixed(d);
+const pctErr = (m, t) => (m === null || !t) ? "–" : (100*Math.abs(m - t)/Math.abs(t)).toFixed(2) + "%";
+
+function updateMeasurements(e){
+  const {L,g,gam} = P();
+  const w0 = Math.sqrt(g/L), T0 = 2*Math.PI/w0;
+  const Tex = exactPeriod(L, g, deg2rad(+sl.a.value));
+  const zeta = gam/(2*w0);
+  const under = zeta < 1;
+  const Td = under ? 2*Math.PI/Math.sqrt(w0*w0 - gam*gam/4) : null;
+
+  // period
+  const Tth = gam === 0 ? Tex : Td;
+  $("tPeriod").textContent = fmt(Tth);
+  $("mPeriod").textContent = fmt(measuredT);
+  $("ePeriod").textContent = pctErr(measuredT, Tth);
+  $("periodNote").textContent = gam === 0
+    ? "Theory: exact large-angle period (AGM). Measured: time between upward zero crossings."
+    : (under ? "Theory: small-angle damped period 2π/√(ω₀² − γ²/4). Expect a few % error at large angles."
+             : "Overdamped: no oscillation, so no period.");
+
+  // decay rate
+  const fit = fitDecay();
+  $("tDecay").textContent = gam > 0 ? fmt(gam/2, 4) : "0";
+  $("mDecay").textContent = fmt(fit, 4);
+  $("eDecay").textContent = gam > 0 ? pctErr(fit, gam/2) : "–";
+
+  // energy loss vs integrated dissipation
+  const lost = E0 - (e.KE + e.PE);
+  $("tLoss").textContent = fmt(dissipated, 4);
+  $("mLoss").textContent = fmt(lost, 4);
+  $("eLoss").textContent = (100*Math.abs(lost - dissipated)/E0).toFixed(4) + "% of E₀";
+
+  $("simTimeT").textContent = simTime.toFixed(2) + " s";
+  $("w0T").textContent = fmt(w0) + " rad/s";
+  $("t0T").textContent = fmt(T0) + " s";
+  $("texT").textContent = fmt(Tex) + " s";
+  $("zetaT").textContent = fmt(zeta, 4);
+  $("regimeT").textContent = gam === 0 ? "Undamped" : zeta < 1 ? "Underdamped" : zeta === 1 ? "Critical" : "Overdamped";
+  $("qT").textContent = gam > 0 ? fmt(w0/gam, 2) : "∞";
+  $("tauT").textContent = gam > 0 ? fmt(2/gam, 2) + " s" : "∞";
+  $("halfT").textContent = gam > 0 ? fmt(Math.LN2/gam, 2) + " s" : "∞";
+  $("deltaT").textContent = (gam > 0 && under) ? fmt(gam*Td/2, 4) : "–";
+  $("remT").textContent = (100*(e.KE + e.PE)/E0).toFixed(2) + "%";
+  $("driftT").textContent = gam === 0 ? maxDrift.toExponential(2) : "n/a (damped)";
+}
+
+function drawGraph(){
+  const w = gcv.width, h = gcv.height;
+  gctx.fillStyle = "#0b1220"; gctx.fillRect(0,0,w,h);
+  gctx.strokeStyle = "rgba(255,255,255,.1)"; gctx.lineWidth = 1;
+  for(let i=0;i<5;i++){
+    const y = i*h/5;
+    gctx.beginPath(); gctx.moveTo(0,y); gctx.lineTo(w,y); gctx.stroke();
+  }
+  const lMax = Math.max(1e-9, ...hist.l);
+  const plot = (data, color, norm) => {
+    if(data.length < 2) return;
+    gctx.beginPath();
+    data.forEach((v,i) => {
+      const x = i*w/MAX_POINTS, y = h - Math.min(1.05, v/norm)*h*0.95 - 4;
+      i ? gctx.lineTo(x,y) : gctx.moveTo(x,y);
+    });
+    gctx.strokeStyle = color; gctx.lineWidth = 2; gctx.stroke();
+  };
+  plot(hist.ke, "#22c55e", E0);
+  plot(hist.pe, "#f59e0b", E0);
+  plot(hist.l,  "#06b6d4", lMax);
+  plot(hist.tot,"#ffffff", E0);
+  gctx.font = "12px Arial";
+  [["KE/E₀","#22c55e",10],["PE/E₀","#f59e0b",60],["|m L² ω| (scaled, not conserved)","#06b6d4",115],["Total/E₀","#ffffff",340]]
+    .forEach(([t,c,x]) => { gctx.fillStyle = c; gctx.fillText(t, x, 16); });
+}
+
+function animate(now){
+  requestAnimationFrame(animate);
+  if(lastNow === null) lastNow = now;
+  const dtReal = Math.min(Math.max((now - lastNow)/1000, 0), 0.05);
+  lastNow = now;
+
+  if(running){
+    acc += dtReal;
+    while(acc >= H){ step(); acc -= H; }
+  }
+
+  const {L,g} = P();
+  const cw = $("canvas").width;
+  const pivotX = cw/2, pivotY = 80, scale = 90;
+  const bobX = pivotX + Math.sin(theta)*L*scale;
+  const bobY = pivotY + Math.cos(theta)*L*scale;
+
+  ctx.clearRect(0,0,cw,$("canvas").height);
+  if(running){ trail.push({x:bobX,y:bobY}); if(trail.length > 60) trail.shift(); }
+  trail.forEach((p,i) => {
+    ctx.beginPath(); ctx.arc(p.x,p.y,2,0,Math.PI*2);
+    ctx.fillStyle = `rgba(56,189,248,${i/trail.length})`; ctx.fill();
+  });
+  ctx.beginPath(); ctx.moveTo(pivotX,pivotY); ctx.lineTo(bobX,bobY);
+  ctx.strokeStyle = "white"; ctx.lineWidth = 4; ctx.stroke();
+  ctx.beginPath(); ctx.arc(pivotX,pivotY,8,0,Math.PI*2); ctx.fillStyle = "#38bdf8"; ctx.fill();
+  ctx.beginPath(); ctx.arc(bobX,bobY,22,0,Math.PI*2); ctx.fillStyle = "#22c55e"; ctx.fill();
+
+  const e = energy(theta, omega, L, g);
+  const tot = e.KE + e.PE;
+  if(running){
+    hist.ke.push(e.KE); hist.pe.push(e.PE); hist.tot.push(tot);
+    hist.l.push(Math.abs(MASS*L*L*omega));
+    if(hist.ke.length > MAX_POINTS) Object.values(hist).forEach(a => a.shift());
+  }
+
+  $("currentAngle").textContent = (theta*180/Math.PI).toFixed(2) + "°";
+  $("velocity").textContent = omega.toFixed(3);
+  $("keText").textContent = e.KE.toFixed(3);
+  $("peText").textContent = e.PE.toFixed(3);
+  $("keBar").style.width = Math.min(100, 100*e.KE/E0) + "%";
+  $("peBar").style.width = Math.min(100, 100*e.PE/E0) + "%";
+
+  updateMeasurements(e);
+  drawGraph();
+}
+
+updateLabels();
+resetPendulum();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
